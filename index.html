@@ -418,15 +418,18 @@ function fitTo(bounds, animate=true, onDone){
 const FINALE_TEXT = `
   <p>안녕 은진아?</p>
   <p>우리가 만난지 100일이 됐네</p>
-  <p>짧다면 짧은 시간이지만 정말 많은 것을 같이 해서 그런지</p>
-  <p>그보다는 더 오래만난 느낌도 들고 처음을 생각하면<br>우리가 서로 정말 많이 가까워진게 느껴져 ㅋㅋㅋ</p>
+  <p>짧다면 짧은 시간이지만 함께 많은 것을 같이 해서 그런지</p>
+  <p>그보다는 더 오래만난 느낌도 들고 처음을 생각하면</p>
+  <p>우리가 서로 정말 많이 가까워진게 느껴져</p>
+  <p>앞으로도 추억 많이 만들면서 잘 만나보자</p>
+  <p>많이 애정하고 사랑해 🦦💚</p>
 `;
 const finale=document.getElementById('finale');
 function enterFinale(e){
   const strip=e.photos.map(p=>`<div class="frame-f"><img src="${p.src}"></div>`).join('');
   finale.querySelector('.reel').innerHTML=strip+strip; // 2벌 = 무한 루프
   finale.querySelector('.reel').style.animationDuration=(Math.max(4,e.photos.length*4))+'s';
-  finale.querySelector('.credits-inner').innerHTML=''; // 글 없이 스포트라이트만 (원하면 FINALE_TEXT 넣기)
+  finale.querySelector('.credits-inner').innerHTML=FINALE_TEXT; // 글 없이 스포트라이트만 (원하면 FINALE_TEXT 넣기)
   finale.classList.add('open');
 }
 function exitFinale(){ finale.classList.remove('open'); }
