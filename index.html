@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex,noimageindex,nofollow" />
+<title>우리 100일 지도</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Nanum+Pen+Script&family=Nanum+Myeongjo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fafafa; --ink:#1d1d1f; --muted:#86868b;
+    --accent:#ff5a4d; --line:#e6e3e0;
+    --ease:cubic-bezier(.16,1,.3,1);
+    --sheet-h:47dvh;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+    color:var(--ink);background:var(--bg);letter-spacing:-.02em}
+  .app{height:100dvh}
+
+  /* ---------- 지도 (모바일: 전체 배경) ---------- */
+  .map-wrap{position:fixed;inset:0}
+  #map{position:absolute;inset:0;background:#eef0f2}
+  .leaflet-container{font-family:inherit}
+  .brand{position:absolute;top:20px;left:20px;z-index:600;
+    background:rgba(255,255,255,.72);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);
+    padding:9px 16px;border-radius:14px;font-weight:700;font-size:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 8px 30px rgba(0,0,0,.07)}
+  .brand small{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:1px}
+
+  .back{position:absolute;top:20px;right:20px;z-index:600;cursor:pointer;
+    background:rgba(255,255,255,.72);backdrop-filter:blur(20px) saturate(1.5);-webkit-backdrop-filter:blur(20px) saturate(1.5);
+    padding:9px 15px;border-radius:14px;font-weight:600;font-size:13px;border:none;color:var(--ink);
+    box-shadow:0 8px 30px rgba(0,0,0,.07);
+    opacity:0;transform:translateY(-8px) scale(.96);pointer-events:none;transition:all .5s var(--ease)}
+  .back.show{opacity:1;transform:none;pointer-events:auto}
+
+  /* 핀 */
+  .pin{border-radius:50%;border:2.5px solid #fff;background-size:cover;background-position:center;
+    box-shadow:0 4px 14px rgba(0,0,0,.22);transition:transform .55s var(--ease),box-shadow .4s var(--ease),border-color .4s;
+    width:40px;height:40px}
+  .pin.num{display:flex;align-items:center;justify-content:center;background:#fff;color:var(--muted);
+    font-size:13px;font-weight:700;width:30px;height:30px}
+  .pin.active{transform:scale(1.4);border-color:var(--accent);box-shadow:0 8px 26px rgba(255,90,77,.5);z-index:1000}
+  .pin.active.num{color:var(--accent)}
+
+  /* 곰🐻·토끼🐰 캐릭터 + 말풍선 (상세에서 핀→핀 걷기) */
+  .ani{position:relative;display:inline-flex;font-size:25px;line-height:1;pointer-events:none}
+  .ani.bear{transform:translateX(-9px)}
+  .ani.rabbit{transform:translateX(8px)}
+  .ani .dir{display:inline-block}
+  .ani.left .dir{transform:scaleX(-1)}
+  .ani .ppl{display:inline-block;animation:bob .36s infinite alternate ease-in-out;
+    filter:drop-shadow(0 3px 4px rgba(0,0,0,.32))}
+  @keyframes bob{from{transform:translateY(0) rotate(3deg)}to{transform:translateY(-5px) rotate(-3deg)}}
+  .ani .name{position:absolute;top:46%;transform:translateY(-50%);font-size:10px;font-weight:800;color:#fff;
+    padding:3px 7px 4px;border-radius:9px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.3);
+    pointer-events:auto;cursor:pointer}
+  .ani.bear .name{right:100%;margin-right:3px;background:#9c6b4a}   /* 곰 왼쪽 */
+  .ani.rabbit .name{left:100%;margin-left:3px;background:#e28aa9}   /* 토끼 오른쪽 */
+  .ani .bub{position:absolute;bottom:118%;left:50%;
+    transform:translateX(-50%) translateY(4px) scale(.7);transform-origin:bottom center;
+    white-space:nowrap;background:#fff;color:#333;font-family:'Nanum Pen Script',cursive;font-size:18px;line-height:1;
+    padding:3px 11px 2px;border-radius:13px;box-shadow:0 5px 14px rgba(0,0,0,.22);opacity:0;
+    transition:opacity .18s var(--ease),transform .18s var(--ease);pointer-events:none}
+  .ani .bub::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:5px solid transparent;border-top-color:#fff}
+  .ani.say .bub{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
+
+  /* ---------- 타임라인: 하단 좌우 카루셀 ---------- */
+  .rail{position:fixed;left:0;right:0;bottom:0;height:var(--sheet-h);z-index:500;
+    overflow:hidden;touch-action:pan-y;overscroll-behavior:contain;
+    background:rgba(250,250,250,.82);backdrop-filter:blur(26px) saturate(1.4);-webkit-backdrop-filter:blur(26px) saturate(1.4);
+    border-radius:26px 26px 0 0;box-shadow:0 -8px 40px rgba(0,0,0,.14)}
+  .rail::-webkit-scrollbar{height:0}
+  .grab{position:fixed;left:50%;bottom:calc(var(--sheet-h) - 13px);transform:translateX(-50%);z-index:501;
+    width:38px;height:5px;border-radius:99px;background:#c9c6c3;pointer-events:none}
+  .track{display:flex;align-items:center;height:100%;width:max-content;--cardw:78vw;
+    transition:opacity .45s var(--ease),transform .55s var(--ease)}
+  .track.leaving{opacity:0;transform:translateY(14px)}
+  /* flex 끝 padding/margin은 스크롤폭에 안 잡혀 → 실제 스페이서(pseudo flex item)로 중앙 여백 */
+  .track::before,.track::after{content:'';flex:0 0 calc((100vw - var(--cardw))/2)}
+  @media(min-width:820px){ .track{--cardw:320px} }
+
+  .card{position:relative;flex:0 0 var(--cardw);height:100%;scroll-snap-align:center;cursor:pointer;
+    display:flex;flex-direction:column;justify-content:center;align-items:center;gap:10px;
+    --p:0;
+    transform:scale(calc(.84 + .16*var(--p)));
+    opacity:calc(.4 + .6*var(--p));
+    transition:opacity .25s linear}
+  .stamp{display:flex;align-items:baseline;gap:8px;margin-bottom:12px;justify-content:center}
+  .date{font-size:11.5px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+  .place{font-size:16px;font-weight:800}
+  .time{font-size:12px;color:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+
+  /* 폴라로이드 (여러 장 스택) */
+  .frame{position:relative;width:74%;margin:0 auto;aspect-ratio:1/1.2}
+  .layer{position:absolute;inset:0;background:#fff;border-radius:3px;
+    padding:7% 7% 23%;box-shadow:0 10px 26px rgba(0,0,0,.18)}
+  .layer .ph{display:block;width:100%;height:100%;background:#e6e6e7 center/cover no-repeat}
+  /* 폴라로이드 아래 손글씨 메모 */
+  .layer .cap{position:absolute;left:5%;right:5%;bottom:1.5%;height:21%;
+    display:flex;align-items:center;justify-content:center;gap:3px;text-align:center;
+    font-family:'Gaegu','Nanum Pen Script',cursive;font-weight:700;font-size:16px;line-height:1.18;color:#3d3a38;
+    overflow:hidden}
+  .cap .who{width:1.25em;height:1.25em;flex:none;vertical-align:-.25em}
+  .cap .colon{margin:0 1px 0 -1px;font-weight:700}
+  .frame .l2 .cap,.frame .l3 .cap{display:none}
+  .frame .top{transform:rotate(-1.2deg)}
+  .frame .l2{transform:rotate(4deg) translate(calc(7px*var(--p)),calc(4px*var(--p)));filter:brightness(.97)}
+  .frame .l3{transform:rotate(-4.5deg) translate(calc(-7px*var(--p)),calc(5px*var(--p)));filter:brightness(.94)}
+  .count{position:absolute;right:-6px;bottom:14%;z-index:3;
+    background:var(--ink);color:#fff;font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:999px;
+    box-shadow:0 4px 12px rgba(0,0,0,.25);opacity:var(--p)}
+
+  /* 상세 카드 (사진 한 장) */
+  .card.photo .frame{width:76%;aspect-ratio:1/1.22}
+  .card.photo .frame .top{transform:rotate(-1.2deg)}
+
+  /* ---------- 피날레(마지막 날): 시네마 모드 ---------- */
+  .finale{position:fixed;inset:0;z-index:2000;background:#060606;opacity:0;pointer-events:none;
+    transition:opacity .5s ease}
+  .finale.open{opacity:1;pointer-events:auto}
+  .finale .stage{position:absolute;inset:0;overflow:hidden;
+    clip-path:circle(0% at 50% 42%);transition:clip-path 1.4s cubic-bezier(.6,0,.2,1)} /* 핀조명 아이리스 */
+  .finale.open .stage{clip-path:circle(90% at 50% 42%)}
+  /* 필름 릴 */
+  .finale .reel-wrap{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:min(72vw,330px);
+    overflow:hidden;-webkit-mask-image:linear-gradient(#000 86%,transparent);mask-image:linear-gradient(#000 86%,transparent)}
+  .finale .reel{display:block;animation:reel 24s linear infinite;filter:brightness(1) saturate(1)}
+  .finale .frame-f{position:relative;background:#111;padding:10px 15px;margin-bottom:12px}
+  .finale .frame-f::before,.finale .frame-f::after{content:'';position:absolute;top:0;bottom:0;width:8px;
+    background:repeating-linear-gradient(#111 0 6px,#dcdcdc 6px 12px)}
+  .finale .frame-f::before{left:2px}
+  .finale .frame-f::after{right:2px}
+  .finale .frame-f img{display:block;width:100%}
+  @keyframes reel{to{transform:translateY(-50%)}}
+  /* 크레딧 */
+  /* 스크림(가독성) — 필름 위, 크레딧 아래 */
+  .finale .scrim{position:absolute;inset:0;background:transparent;pointer-events:none}
+  /* 크레딧: 가운데 또렷, 아래 fade-in / 위 fade-out (고정 마스크) */
+  .finale .credits{position:absolute;inset:0;overflow:hidden;display:flex;justify-content:center;
+    -webkit-mask-image:linear-gradient(to bottom,transparent 3%,#000 32%,#000 58%,transparent 95%);
+    mask-image:linear-gradient(to bottom,transparent 3%,#000 32%,#000 58%,transparent 95%)}
+  .finale .credits-inner{position:absolute;top:0;width:88%;max-width:520px;text-align:center;color:#fbf7f2;
+    font-family:'Nanum Myeongjo',serif;font-size:18px;font-weight:400;line-height:2.05;letter-spacing:.02em;
+    text-shadow:0 1px 10px rgba(0,0,0,.55);animation:credits 36s linear infinite}
+  .finale .credits-inner p{margin:0 0 1.7em}
+  @keyframes credits{from{transform:translateY(100vh)}to{transform:translateY(-135%)}}
+  /* 스포트라이트 비네트 */
+  .finale .vignette{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% 44%,transparent 0%,transparent 19%,rgba(0,0,0,.5) 40%,rgba(0,0,0,.9) 60%,#000 78%)}
+  .finale .finale-close{position:absolute;top:16px;right:16px;z-index:3;width:40px;height:40px;border-radius:50%;
+    border:none;background:rgba(255,255,255,.14);color:#fff;font-size:17px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="map-wrap">
+    <div class="brand">우리 100일 ♥<small id="sub">스크롤해서 그날로 떠나요</small></div>
+    <button class="back" id="back">← 전체 지도</button>
+    <div id="map"></div>
+  </div>
+  <div class="rail" id="rail"><div class="grab"></div><div class="track" id="track"></div></div>
+</div>
+
+<div class="finale" id="finale">
+  <div class="stage">
+    <div class="reel-wrap"><div class="reel"></div></div>
+    <div class="scrim"></div>
+    <div class="vignette"></div>
+    <div class="credits"><div class="credits-inner"></div></div>
+  </div>
+  <button class="finale-close" aria-label="닫기">✕</button>
+</div>
+
+<script>
+// 데이터는 photos.json에서 로드 (사진: {src,time,lat,lng,title,memo,by})
+let events=[];
+
+// ---------- 지도 ----------
+const KOREA=L.latLngBounds([[33.0,125.9],[38.6,129.6]]);
+const OVERVIEW_ZOOM=11; // 개요에서 포커스 시 대표좌표로 줌인 (flyTo가 이동 중 줌아웃→줌인)
+const map=L.map('map',{zoomControl:false,attributionControl:false,
+  maxBounds:[[31.5,123.5],[39.6,132.5]],maxBoundsViscosity:.5}).setView([36.4,127.9],7);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png',
+  {maxZoom:19}).addTo(map);
+
+let markers=[];
+function clearPins(){ markers.forEach(m=>map.removeLayer(m)); markers=[]; }
+function overviewPin(e){
+  return L.divIcon({className:'',iconSize:[40,40],iconAnchor:[20,20],
+    html:`<div class="pin" style="background-image:url('${e.photos[0].src}')"></div>`});
+}
+function photoPin(i){
+  return L.divIcon({className:'',iconSize:[30,30],iconAnchor:[15,15],
+    html:`<div class="pin num">${i+1}</div>`});
+}
+
+// ---------- 상태 ----------
+let mode='overview', ev=null, cards=[], active=-1, flying=false, entering=false;
+const rail=document.getElementById('rail'), track=document.getElementById('track');
+const back=document.getElementById('back'), sub=document.getElementById('sub');
+
+// ---------- 메모: 곰·토끼 SVG (저자 표시, 데이터에 미리 채움) ----------
+const ICON={
+  bear:`<svg class="who" viewBox="0 0 28 28"><circle cx="7" cy="8" r="4" fill="#9c6b4a"/><circle cx="21" cy="8" r="4" fill="#9c6b4a"/><circle cx="7" cy="8" r="1.8" fill="#c79a76"/><circle cx="21" cy="8" r="1.8" fill="#c79a76"/><circle cx="14" cy="16" r="9.5" fill="#b07d55"/><ellipse cx="14" cy="19" rx="5" ry="3.8" fill="#ecdac8"/><circle cx="10.3" cy="14" r="1.4" fill="#3a2a1d"/><circle cx="17.7" cy="14" r="1.4" fill="#3a2a1d"/><ellipse cx="14" cy="17.2" rx="1.7" ry="1.3" fill="#3a2a1d"/></svg>`,
+  rabbit:`<svg class="who" viewBox="0 0 28 28"><ellipse cx="10" cy="6" rx="2.6" ry="6.5" fill="#f4f4f6"/><ellipse cx="18" cy="6" rx="2.6" ry="6.5" fill="#f4f4f6"/><ellipse cx="10" cy="6.5" rx="1.1" ry="4.2" fill="#f2b8cd"/><ellipse cx="18" cy="6.5" rx="1.1" ry="4.2" fill="#f2b8cd"/><circle cx="14" cy="17" r="9" fill="#f4f4f6"/><circle cx="10.6" cy="16" r="1.3" fill="#5a4638"/><circle cx="17.4" cy="16" r="1.3" fill="#5a4638"/><ellipse cx="14" cy="18.4" rx="1.4" ry="1" fill="#e895b1"/></svg>`
+};
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function capHTML(text,by){ text=(text||'').trim(); if(!text&&!by) return '';
+  return (by&&ICON[by] ? ICON[by]+'<span class="colon">:</span>' : '') + esc(text); }
+
+function renderOverview(){
+  track.innerHTML=events.map((e,i)=>{
+    const r=e.photos[0], l2=e.photos[1]||r, l3=e.photos[2]||r; // 대표=첫 사진, 뒤 스택은 다음 사진들
+    return `
+    <div class="card event" data-i="${i}">
+      <div class="stamp"><span class="date">${e.dateLabel}</span><span class="place">${esc(r.title)}</span></div>
+      <div class="frame">
+        <div class="layer l3"><i class="ph" style="background-image:url('${l3.src}')"></i></div>
+        <div class="layer l2"><i class="ph" style="background-image:url('${l2.src}')"></i></div>
+        <div class="layer top"><i class="ph" style="background-image:url('${r.src}')"></i><span class="cap">${capHTML(r.memo,r.by)}</span></div>
+        <div class="count">📷 ${e.photos.length}</div>
+      </div>
+    </div>`;
+  }).join('');
+  clearPins();
+  markers=events.map(e=>L.marker(e.ll,{icon:overviewPin(e)}).addTo(map));
+  markers.forEach((m,i)=>m.on('click',()=>center(i)));
+}
+function renderDetail(e){
+  track.innerHTML=e.photos.map((p,i)=>`
+    <div class="card photo" data-i="${i}">
+      <div class="stamp"><span class="place">${esc(p.title)}</span><span class="time">${p.time}</span></div>
+      <div class="frame"><div class="layer top"><i class="ph" style="background-image:url('${p.src}')"></i><span class="cap">${capHTML(p.memo,p.by)}</span></div></div>
+    </div>`).join('');
+  clearPins();
+  markers=e.photos.map((p,i)=>L.marker([p.lat,p.lng],{icon:photoPin(i)}).addTo(map));
+}
+
+// ---------- 스크롤 → 포커스(애플 스타일 근접 스케일) ----------
+function refresh(){ cards=[...track.querySelectorAll('.card')]; }
+function onFocus(i, move=true){
+  if(i<0) return;
+  active=i;
+  markers.forEach((m,k)=>{
+    const on=k===i, el=m.getElement();
+    if(el) el.querySelector('.pin').classList.toggle('active',on);
+    m.setZIndexOffset(on?1000:0); // 겹칠 때 포커스 핀이 맨 앞
+  });
+  if(mode==='detail'){
+    // 상세: 지도 프레이밍 고정, 곰·토끼가 핀→핀 걸어감 (등장 셋업 전엔 막음)
+    if(move && !entering) walkChars([ev.photos[i].lat,ev.photos[i].lng]);
+    return;
+  }
+  // 개요: flyTo로 줌아웃→다음 대표좌표 줌인
+  if(!move || flying) return;
+  moveToLL(events[i].ll, OVERVIEW_ZOOM, true);
+}
+function updateFocus(){ // 가로 중앙 기준으로 --p(스케일)와 포커스 갱신
+  const R=rail.getBoundingClientRect(), mid=R.left+R.width/2;
+  let best=-1,bd=1e9;
+  cards.forEach((el,i)=>{
+    const r=el.getBoundingClientRect(), c=r.left+r.width/2, d=Math.abs(c-mid);
+    el.style.setProperty('--p',Math.max(0,1-d/(R.width*0.6)).toFixed(3));
+    if(d<bd){bd=d;best=i;}
+  });
+  if(best!==-1 && best!==active) onFocus(best);
+}
+let raf;
+function onScroll(){ cancelAnimationFrame(raf); raf=requestAnimationFrame(updateFocus); }
+rail.addEventListener('scroll',onScroll,{passive:true});
+
+// ---------- 부드러운 좌우 글라이드 카루셀 ----------
+const GLIDE_MS=800; // ponytail: 스와이프 안착 시간(클수록 스르륵). 감성 우선
+let glideRaf, dragX=null, dragScroll=0, dragIdx=0, dragMoved=false, tapCard=null;
+function scrollForCard(i){ const c=cards[i]; return c.offsetLeft + c.offsetWidth/2 - rail.clientWidth/2; }
+function nearestIndex(){ const mid=rail.scrollLeft+rail.clientWidth/2; let b=0,bd=1e9;
+  cards.forEach((el,i)=>{ const c=el.offsetLeft+el.offsetWidth/2, d=Math.abs(c-mid); if(d<bd){bd=d;b=i;} }); return b; }
+function glideTo(i, dur=GLIDE_MS){
+  i=Math.max(0,Math.min(cards.length-1,i));
+  const start=rail.scrollLeft, dist=scrollForCard(i)-start;
+  if(Math.abs(dist)<0.5){ rail.scrollLeft=start+dist; updateFocus(); return; }
+  const t0=performance.now();
+  cancelAnimationFrame(glideRaf);
+  (function step(now){
+    const k=Math.min(1,(now-t0)/dur), e=k<.5?4*k*k*k:1-Math.pow(-2*k+2,3)/2; // easeInOutCubic
+    rail.scrollLeft=start+dist*e; updateFocus();
+    if(k<1) glideRaf=requestAnimationFrame(step);
+  })(t0);
+}
+function center(i){ glideTo(i); }
+// 손가락 드래그: 1:1로 따라오고, 떼면 방향/근접 카드로 스르륵
+rail.addEventListener('pointerdown',e=>{ cancelAnimationFrame(glideRaf); dragX=e.clientX; dragScroll=rail.scrollLeft; dragIdx=nearestIndex(); dragMoved=false; tapCard=e.target.closest('.card'); try{rail.setPointerCapture(e.pointerId);}catch(_){} });
+rail.addEventListener('pointermove',e=>{ if(dragX==null) return; const dx=e.clientX-dragX; if(Math.abs(dx)>4) dragMoved=true; rail.scrollLeft=dragScroll-dx; updateFocus(); });
+function endDrag(e){ if(dragX==null) return; const dx=e.clientX-dragX; dragX=null;
+  if(!dragMoved){ // 탭: 상세 진입 / 카드 중앙
+    if(tapCard){ const i=+tapCard.dataset.i;
+      if(mode!=='overview') center(i);
+      else if(i===events.length-1) enterFinale(events[i]); // 마지막 날 = 피날레
+      else enterDetail(i); }
+    return;
+  }
+  let t=nearestIndex(); if(Math.abs(dx)>40 && t===dragIdx) t=dragIdx+(dx<0?1:-1); glideTo(t); }
+rail.addEventListener('pointerup',endDrag);
+rail.addEventListener('pointercancel',endDrag);
+// 데스크탑 휠/트랙패드: 한 장씩
+let wheelLock=false;
+rail.addEventListener('wheel',e=>{ e.preventDefault(); if(wheelLock) return; wheelLock=true; setTimeout(()=>wheelLock=false,420);
+  const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY; glideTo(nearestIndex()+(d>0?1:-1)); },{passive:false});
+
+// 모바일에선 하단 시트가 지도 아래쪽을 가리므로, 핀이 시트 위(보이는 영역)에 오도록 중심을 올림
+// 하단 시트가 가리는 만큼 중심을 위로 옮겨, 핀이 보이는 영역(위쪽)에 오도록
+function offsetCenter(ll, zoom){
+  const pt=map.project(L.latLng(ll), zoom);
+  pt.y += window.innerHeight*0.235; // ponytail: 하단시트(47dvh) 절반 오프셋 노브
+  return map.unproject(pt, zoom);
+}
+function moveToLL(ll, zoom, fly=false){
+  const c=offsetCenter(ll, zoom);
+  if(fly) map.flyTo(c, zoom, {duration:2.4, easeLinearity:.1}); // 부드럽게 줌아웃→줌인
+  else map.setView(c, zoom, {animate:true, duration:1.2, easeLinearity:.12});
+}
+// 보이는 지도 영역의 상단 가운데 좌표 (곰·토끼 등장 지점)
+function topCenterLL(){
+  const s=map.getSize();
+  return map.containerPointToLatLng([s.x/2, 108]); // 화면 상단 가운데(상단 UI 아래)
+}
+
+// ---------- 곰🐻·토끼🐰: 핀→핀 이동 시 랜덤 시나리오 (상세 전용) ----------
+function charIcon(kind,emoji,name){ return L.divIcon({className:'',iconSize:[40,40],iconAnchor:[20,32],
+  html:`<div class="ani ${kind}"><span class="bub"></span><span class="dir"><span class="ppl">${emoji}</span></span><span class="name">${name}</span></div>`}); }
+let bear=null, rabbit=null, walkRaf;
+// 이름표 클릭 시 캐릭터별 랜덤 대사
+const LINES={
+  bear:['은진아~','이게 어떻게 된거냐면...','이쁘다...헤헤','즐','사랑해 은진아 ❤️'],
+  rabbit:['오빠!','어디 퀸의 이름을 눌러?','난 퀸이니까~','LIVE FAST DIE SLOW!','당근이지 🥕']
+};
+const sayTimer={}; // 캐릭터별 타이머(공용이면 서로 취소돼서 말풍선이 안 사라짐)
+function sayRandom(who){
+  const m=who==='bear'?bear:rabbit, lines=LINES[who]; if(!m) return;
+  setBubble(m, lines[Math.floor(Math.random()*lines.length)]);
+  clearTimeout(sayTimer[who]); sayTimer[who]=setTimeout(()=>{ if(m) setBubble(m,null); }, 2800);
+}
+function bindName(m,who){ const el=m.getElement()?.querySelector('.name');
+  if(el) el.addEventListener('click',e=>{ e.stopPropagation(); sayRandom(who); }); }
+function placeChars(ll){ const p=L.latLng(ll);
+  if(!bear){ bear=L.marker(p,{icon:charIcon('bear','🐻','재식'),zIndexOffset:3000,interactive:false}).addTo(map);
+             rabbit=L.marker(p,{icon:charIcon('rabbit','🐰','은진'),zIndexOffset:3001,interactive:false}).addTo(map);
+             bindName(bear,'bear'); bindName(rabbit,'rabbit'); }
+  else { bear.setLatLng(p); rabbit.setLatLng(p); } }
+function removeChars(){ cancelAnimationFrame(walkRaf); [bear,rabbit].forEach(m=>m&&map.removeLayer(m)); bear=rabbit=null; }
+
+// 이징 & 구간 리맵
+const E={ io:k=>k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2, out:k=>1-(1-k)*(1-k), in:k=>k*k,
+  back:k=>1+2.7*Math.pow(k-1,3)+1.7*Math.pow(k-1,2) };
+const seg=(k,a,b)=>Math.max(0,Math.min(1,(k-a)/(b-a))), cl=v=>Math.max(0,Math.min(1,v));
+const WALK_SPEED=2.4; // ponytail: 걷기 속도 배율(클수록 느림). 시나리오 감상 시간 확보
+// 시나리오: b/r=곰/토끼 진행도(0..1, k=1에서 1). bub=[누구,대사,시작k,끝k]
+const SCENES=[
+  {d:1200, b:E.io, r:E.io},                                                                    // 나란히
+  {d:1500, b:k=>E.out(cl(k/.6)),        r:k=>E.io(seg(k,.3,1)),  bub:[['rabbit','같이가!',.15,.6]]},   // 곰 먼저
+  {d:1500, b:k=>E.io(seg(k,.2,1)),      r:k=>E.out(cl(k/.5)),    bub:[['bear','천천히 가~',.2,.6]]},    // 토끼 먼저
+  {d:1300, b:E.io, r:E.io,                                       bub:[['bear','❤️',.35,.9]]},          // 손잡고 하트
+  {d:1300, b:E.io, r:E.back,                                     bub:[['rabbit','야호!',.5,.95]]},      // 토끼 폴짝
+  {d:1500, b:E.in, r:k=>E.out(cl(k/.55)),                        bub:[['rabbit','빨리 와~',.6,.95]]},   // 토끼 기다림
+  {d:1600, b:k=>k<.42?E.io(seg(k,0,.42))*.5:.5+E.io(seg(k,.58,1))*.5,
+           r:k=>k<.42?E.io(seg(k,0,.42))*.5:.5+E.io(seg(k,.58,1))*.5, bub:[['bear','우와 예쁘다',.42,.62]]}, // 중간 구경
+  {d:1300, b:k=>cl(E.io(k)+.07*Math.sin(k*Math.PI)), r:k=>cl(E.io(k)-.07*Math.sin(k*Math.PI)),
+           bub:[['bear','내가 먼저!',.7,.98]]},                                                          // 경주
+  {d:1500, b:k=>E.io(seg(k,.12,.85)),   r:k=>E.out(cl(k/.45)),   bub:[['rabbit','흥!',.45,.72],['bear','미안 미안~',.5,.85]]}, // 토끼 삐짐
+  {d:1400, b:E.in, r:E.in,                                       bub:[['rabbit','다 왔다!',.8,1]]},      // 막판 대시
+];
+function lerpLL(a,b,p){ return L.latLng(a.lat+(b.lat-a.lat)*p, a.lng+(b.lng-a.lng)*p); }
+function setBubble(m,text){ const el=m.getElement(); if(!el) return;
+  const ani=el.querySelector('.ani'), bub=el.querySelector('.bub');
+  if(text){ bub.textContent=text; ani.classList.add('say'); } else ani.classList.remove('say'); }
+function setFace(left){ [bear,rabbit].forEach(m=>{ const a=m.getElement()?.querySelector('.ani'); if(a) a.classList.toggle('left',left); }); }
+function bubbleAt(sc,who,k){ let t=null; (sc.bub||[]).forEach(([w,txt,s,e])=>{ if(w===who&&k>=s&&k<=e) t=txt; }); return t; }
+function walkChars(to){
+  if(!bear) return placeChars(to);
+  to=L.latLng(to);
+  const fromB=bear.getLatLng(), fromR=rabbit.getLatLng(); // 현재 실제 위치에서 출발(끊겨도 이어짐)
+  if(fromB.equals(to)&&fromR.equals(to)) return;
+  setFace(to.lng < (fromB.lng+fromR.lng)/2);
+  const sc=SCENES[Math.floor(Math.random()*SCENES.length)], t0=performance.now();
+  cancelAnimationFrame(walkRaf);
+  (function step(now){
+    const k=Math.min(1,(now-t0)/(sc.d*WALK_SPEED));
+    bear.setLatLng(lerpLL(fromB,to,cl(sc.b(k))));
+    rabbit.setLatLng(lerpLL(fromR,to,cl(sc.r(k))));
+    setBubble(bear, bubbleAt(sc,'bear',k));
+    setBubble(rabbit, bubbleAt(sc,'rabbit',k));
+    if(k<1) walkRaf=requestAnimationFrame(step);
+    else { bear.setLatLng(to); rabbit.setLatLng(to); setBubble(bear,null); setBubble(rabbit,null); }
+  })(t0);
+}
+
+// 시트/패널이 가리는 영역만큼 패딩 → 지도 내용이 항상 '보이는 영역' 안에 잡힘
+function pad(){
+  return {paddingTopLeft:[14,14], paddingBottomRight:[14, Math.round(window.innerHeight*0.47)]};
+}
+// fitBounds(=setView 기반)는 세로 뷰포트에서도 정상. flyToBounds(=flyTo)는 줌계산 실패해서 안 씀
+function fitTo(bounds, animate=true, onDone){
+  flying=true;
+  map.fitBounds(bounds, {animate, duration:1.1, easeLinearity:.2, maxZoom:15, ...pad()});
+  let done=false; const run=()=>{ if(done) return; done=true;
+    flying=false; if(active>=0) onFocus(active,false); if(onDone) onDone(); };
+  map.once('moveend', run);
+  setTimeout(run, animate?1250:60); // moveend 누락(줌 애니 중단 등) 대비 폴백
+}
+
+// ---------- 피날레(마지막 날) 시네마 모드 ----------
+const FINALE_TEXT = `
+  <p>안녕 은진아?</p>
+  <p>우리가 만난지 100일이 됐네</p>
+  <p>짧다면 짧은 시간이지만 정말 많은 것을 같이 해서 그런지</p>
+  <p>그보다는 더 오래만난 느낌도 들고 처음을 생각하면<br>우리가 서로 정말 많이 가까워진게 느껴져 ㅋㅋㅋ</p>
+`;
+const finale=document.getElementById('finale');
+function enterFinale(e){
+  const strip=e.photos.map(p=>`<div class="frame-f"><img src="${p.src}"></div>`).join('');
+  finale.querySelector('.reel').innerHTML=strip+strip; // 2벌 = 무한 루프
+  finale.querySelector('.reel').style.animationDuration=(Math.max(4,e.photos.length*4))+'s';
+  finale.querySelector('.credits-inner').innerHTML=''; // 글 없이 스포트라이트만 (원하면 FINALE_TEXT 넣기)
+  finale.classList.add('open');
+}
+function exitFinale(){ finale.classList.remove('open'); }
+finale.querySelector('.finale-close').addEventListener('click',exitFinale);
+
+// ---------- 모드 전환 ----------
+function enterDetail(i){
+  ev=events[i]; mode='detail'; entering=true;
+  track.classList.add('leaving');
+  setTimeout(()=>{
+    renderDetail(ev); refresh(); active=-1;
+    track.classList.remove('leaving');
+    rail.scrollLeft=0;
+    back.classList.add('show'); sub.textContent=ev.dateLabel+' · 사진 넘겨보기';
+    fitTo(L.latLngBounds(ev.photos.map(p=>[p.lat,p.lng])), true, ()=>{
+      placeChars(topCenterLL()); // 상단 가운데에서 등장
+      entering=false;            // 이제부터 걷기 허용
+      onFocus(0,true);           // 1번 사진 포커스 → 첫 핀으로 걸어옴
+      center(0);
+    });
+  },300);
+}
+function exitDetail(){
+  const i=events.indexOf(ev); mode='overview'; ev=null; entering=false;
+  removeChars();
+  track.classList.add('leaving');
+  back.classList.remove('show');
+  setTimeout(()=>{
+    renderOverview(); refresh(); active=-1;
+    track.classList.remove('leaving');
+    onFocus(i,true); // 개요 복귀: 보던 이벤트로 줌인(fly)
+    sub.textContent='스크롤해서 그날로 떠나요';
+    center(i); requestAnimationFrame(onScroll);
+  },300);
+}
+back.addEventListener('click',exitDetail);
+
+// ---------- 시작: photos.json 로드 후 첫 대표사진에 줌인 ----------
+fetch('photos.json').then(r=>r.json()).then(data=>{
+  events=data.events;
+  events.forEach(e=>{ e.ll=[e.photos[0].lat, e.photos[0].lng]; }); // 대표 좌표 = 첫 사진
+  renderOverview(); refresh(); active=0;
+  map.setView(offsetCenter(events[0].ll, OVERVIEW_ZOOM), OVERVIEW_ZOOM, {animate:false});
+  onFocus(0,false);
+  requestAnimationFrame(()=>{ onScroll(); center(0); });
+}).catch(err=>{ document.getElementById('sub').textContent='photos.json 로드 실패'; console.error(err); });
+</script>
+</body>
+</html>
